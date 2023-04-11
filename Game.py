@@ -5,6 +5,8 @@ os.environ['PYGAME_HIDE_SUPPORT_PROMPT'] = "hide"
 import pygame as pg
 
 
+import AlfaBeta as ab
+
 #pygame simple setup
 pg.init()
 pg.display.set_caption('Reversi')
@@ -19,7 +21,8 @@ RED = (255, 0, 0)
 M_GRAY = (121, 131, 131)
 
 
-
+time_to_PC_move = 1*1000
+PC_move = False
 
 class Button:
     def __init__(self, color, x, y, width, height, text='',outline=None, function=None):
@@ -69,63 +72,20 @@ class Button:
             self.function()
 
 
+PC_move, time_to_PC_move, PC_next_move= False, 1.5*1000, None
 
-
-class Piece:
-    def __init__(self, color, x, y):
-        self.color = color
-        self.x = x
-        self.y = y
-        self.rect = pg.Rect(x*75, y*75, 75, 75)
-
-    def draw(self, screen):
-        pg.draw.circle(screen, self.color, (self.x*75+37, self.y*75+37), 30)
-
-    def is_hovered(self, pos):
-        if self.rect.collidepoint(pos):
-            return True
-        
-        return False
-
-    def is_clicked(self, event):
-        if event.type == pg.MOUSEBUTTONDOWN:
-            if event.button == 1:
-                if self.is_hovered(event.pos):
-                    return True
-        
-        return False
-
-    def call_function(self):
-        if self.function:
-            self.function()
-
-
+Board = ab.Board()
 
 #game state 0 - selecting who to play with(pc, friend), 1 - chosing who starts, 2 - playing
 game_state = 0
-game_opponent = 0 #0 - pc, 1 - friend
-game_turn = 0 #0 - black, 1 - white
-who_is_first = 0 #0 - player 1, 1 - player 2(pc)
+game_opponent = 0 #0 - pc, 1 - friend, 2 - pc vs pc
+who_is_first = 0 #0 - player 1, 1 - player 2(pc) 
 
 isnt_valid = ()
 valid_moves = []
 
-score = {
-    BLACK: 2,
-    WHITE: 2
-}
-
-
-
-#game variables
-Stage = [['' for _ in range(8)] for _ in range(8)]
 widgets = []
 #put 4 pieces in the middle of the board(2 black, 2 white)
-Stage[4][4] = Piece(WHITE, 4, 4)
-Stage[3][3] = Piece(WHITE, 3, 3)
-Stage[3][4] = Piece(BLACK, 4, 3)
-Stage[4][3] = Piece(BLACK, 3, 4)
-
 
 #game functions
 def draw_board():
@@ -134,7 +94,7 @@ def draw_board():
             pg.draw.rect(screen, BLACK, (x*75, y*75, 75, 75), 1)
             if (x,y)==isnt_valid:
                 pg.draw.rect(screen, (255,0,0), (x*75+1, y*75+1, 74, 74))
-            elif (x,y) in [i[:-2] for i in valid_moves]:
+            elif (x,y) in valid_moves:
                 pg.draw.rect(screen, (255,255,0), (x*75+1, y*75+1, 74, 74))
             else:
                 pg.draw.rect(screen, GREEN, (x*75+1, y*75+1, 74, 74))
@@ -142,16 +102,26 @@ def draw_board():
 def draw_pieces():
     for y in range(8):
         for x in range(8):
-            if Stage[y][x] != '':
-                Stage[y][x].draw(screen)
+            if Board.field[y][x] == "B":
+                pg.draw.circle(screen, BLACK, (x*75+37, y*75+37), 30)
+            elif Board.field[y][x] == "W":
+                pg.draw.circle(screen, WHITE, (x*75+37, y*75+37), 30)
+            elif (x,y) == PC_next_move:
+                pg.draw.circle(screen, M_GRAY, (x*75+37, y*75+37), 30)
 
 
 def GameSetup():
     #dispose buttons
-    global game_state
+    global game_state, PC_move, time_to_PC_move, PC_next_move
     widgets.clear()
     
     game_state = 2
+    if game_opponent == 0 or game_opponent == 2:
+        ab.build_tree(ab.Node(Board), ab.depth)
+        if who_is_first == 1 or game_opponent == 2:
+            PC_move = True
+            time_to_PC_move = 1.5 * 1000
+            PC_next_move = ab.best_move(ab.Node(Board))
 
 def drawGame():
     draw_board()
@@ -166,8 +136,10 @@ def MenuSetup():
     widgets.clear()
     play_with_pc = Button(M_GRAY, 200, 200, 200, 50, 'Play with PC',outline=BLACK, function= lambda: setGameOpponent(0))
     play_with_friend = Button(M_GRAY, 200, 300, 200, 50, 'Play with friend',outline=BLACK, function= lambda: setGameOpponent(1))
+    PC_with_PC = Button(M_GRAY, 200, 400, 200, 50, 'PC vs PC',outline=BLACK, function= lambda: setGameOpponent(2))
     widgets.append(play_with_pc)
     widgets.append(play_with_friend)
+    widgets.append(PC_with_PC)
 
 
 def setGameOpponent(_game_opponent):
@@ -190,24 +162,27 @@ def drawMenu():
 def WinRender():
     screen.fill(WHITE)
     font = pg.font.Font(None, 100)
-    if score[BLACK] > score[WHITE]:
-        text = font.render('Black wins', 1, BLACK)
-    elif score[BLACK] < score[WHITE]:
-        text = font.render('White wins', 1, WHITE)
+    
+    if Board.get_winner() == "B":
+        text = font.render('Black wins' + ("(You)" if who_is_first == 0  and game_opponent==0 else ("(PC)" if who_is_first == 1  and game_opponent==0 else "")), 1, BLACK)
+    elif Board.get_winner() == "W":
+        text = font.render("White wins" + ("(You)" if who_is_first == 0  and game_opponent==0 else ("(PC)" if who_is_first == 1  and game_opponent==0 else "")), 1, BLACK)
     else:
         text = font.render('Draw', 1, BLACK)
-    screen.blit(text, (200, 200))
+
+    screen.blit(text, (0,200))
     pg.display.update()
 
 def setGameTurn(_game_turn):
     global who_is_first
     print('game turn set to', _game_turn)
     who_is_first = _game_turn
+    Board.maximizing = True
     GameSetup()
 
 def MenuPost():
     widgets.clear()
-    if game_opponent == 1:
+    if game_opponent == 1 or game_opponent == 2:
         GameSetup()
     elif game_opponent == 0:
         #add to buttons to choose who starts the game player or pc
@@ -219,86 +194,26 @@ def MenuPost():
         widgets.append(back)
 
 
-
-
-def makeMove(event):
-    global game_turn
-    color = BLACK if game_turn == 0 else WHITE
-    #get mouse position in the board
-    x = event.pos[0]//75
-    y = event.pos[1]//75
-    if x<0 or x>7 or y<0 or y>7:
-        return
-    #check if the place is empty
-    valid_moves = getValidMoves(x,y, BLACK if game_turn == 0 else WHITE)
-    if valid_moves != []:
-        Stage[y][x] = Piece(color, x, y)
-        score [color] += 1
-        #change the color of the pieces
-        for i in valid_moves:
-            pos = [x,y]
-            while tuple(pos) != i[:-2]:
-                Stage[pos[1]][pos[0]].color = color
-                score [color] += 1
-                pos[0] += i[2]
-                pos[1] += i[3]
-
-        game_turn = (game_turn+1)%2
-        if getValidMovesForColor(BLACK if game_turn == 0 else WHITE) == []:
-            print('no valid moves for', 'black' if game_turn == 0 else 'white')
-            game_turn = (game_turn+1)%2
-            if getValidMovesForColor(BLACK if game_turn == 0 else WHITE) == []:
-                global game_state
-                print('also no valid moves for', 'black' if game_turn == 0 else 'white')
-                print('game over')
-                game_state = 3
                 
-
-
-
-def getValidMovesForColor(color):
-    valid_moves = []
-    for y in range(8):
-        for x in range(8):
-            if Stage[y][x] == '':
-                if getValidMoves(x,y,color) != []:
-                    valid_moves.append((x,y))
-    return valid_moves
-
-def getValidMoves(x,y,colorOfPiece):
-    #check if the move is valid and return a list of valid moves
-    #check all directions to see if the move is valid
-
-    good_moves = []
-    if Stage[y][x] != '':
-        return []
-    for i in [-1,0,1]:
-        for j in [-1,0,1]:
-            if i==0 and j==0:
-                continue
-            t = checkDirection(x,y,i,j,0, colorOfPiece)
-            if t != (-1,-1):
-                good_moves.append(t)
-    return good_moves
+def MouseClick(event):
+    global valid_moves, PC_move, time_to_PC_move, PC_next_move, game_state
     
+    if ( who_is_first == 1 and Board.turn == "B" and game_opponent == 0) or (who_is_first == 0 and Board.turn == "W" and game_opponent == 0) or game_opponent == 2:
+        return
+    Board.make_move(event.pos[0]//75, event.pos[1]//75)
+    valid_moves = []
 
-def checkDirection(x,y,dx,dy,depth, colorOfPiece):
-    x += dx
-    y += dy
-    depth += 1
+    if Board.field[event.pos[1]//75][event.pos[0]//75] == " ":
+        return
 
-    if x<0 or x>7 or y<0 or y>7:
-        return (-1,-1)
-    if Stage[y][x] == '':
-        return (-1,-1)
-    if Stage[y][x].color != colorOfPiece:
-        return checkDirection(x,y,dx,dy,depth, colorOfPiece)
-    if Stage[y][x].color == colorOfPiece and depth>1:
-        return (x,y,dx,dy)
-    return (-1,-1)
+    if Board.is_game_over():
+        game_state = 3
+        return
 
-
-
+    if game_opponent == 0 and (Board.turn == "B" and who_is_first == 1 or Board.turn == "W" and who_is_first == 0):
+        PC_move = True
+        time_to_PC_move = 1.5 * 1000
+        PC_next_move = ab.best_move(ab.Node(Board))
 
 
 def predictMove(event):
@@ -310,7 +225,7 @@ def predictMove(event):
     if x<0 or x>7 or y<0 or y>7:
         return
 
-    valid_moves = getValidMoves(x,y, BLACK if game_turn == 0 else WHITE)
+    valid_moves = Board.legal_moves.get((x,y), [])
     if valid_moves == []:
         isnt_valid = (x,y)
     else:
@@ -321,6 +236,7 @@ def predictMove(event):
 
 def main():
     run = True
+    global PC_move, time_to_PC_move, game_state, PC_next_move
     while run:
         clock.tick(60)
         if game_state == 0 or game_state == 1:
@@ -329,12 +245,27 @@ def main():
             drawGame()
         elif game_state == 3:
             WinRender()
+        if PC_move and time_to_PC_move > 0:
+            time_to_PC_move -= clock.get_time()
+            if time_to_PC_move <= 0:
+                Board.make_move(*PC_next_move)
+                if game_opponent == 2:
+                    PC_next_move = ab.best_move(ab.Node(Board))
+                    time_to_PC_move = 1.5 * 1000
+                else:
+                    PC_move = False
+
+                if Board.is_game_over():
+                    game_state = 3
+
 
         for event in pg.event.get():
             if event.type == pg.QUIT:
                 run = False
             if event.type == pg.MOUSEMOTION:
                 if game_state == 2:
+                    if ( who_is_first == 1 and Board.turn == "B" and game_opponent == 0) or (who_is_first == 0 and Board.turn == "W" and game_opponent == 0) or game_opponent == 2:
+                        break
                     predictMove(event)
             if event.type == pg.MOUSEBUTTONDOWN:
                 if game_state == 0:
@@ -343,7 +274,7 @@ def main():
                             if widget.is_clicked(event):
                                 widget.function()
                 elif game_state == 2:
-                    makeMove(event)
+                    MouseClick(event)
                 elif game_state == 3:
                     MenuSetup()
                 
