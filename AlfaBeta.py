@@ -1,22 +1,44 @@
-#Alpha Beta Pruning Algorithm for Reversi Game with Depth 4
-depth = 2
+#Alpha Beta Pruning Algorithm for Reversi Game with Depth 3
+import random
+
+
+depth = 3
 
 
 class Board:
-    def __init__(self,max_first = False):
-        self.field = [[' ' for i in range(8)] for j in range(8)]
-        self.field[3][3] = 'W'
-        self.field[3][4] = 'B'
-        self.field[4][3] = 'B'
-        self.field[4][4] = 'W'
-        self.free_cells = 60
-        self.score = {
-            'B': 2,
-            'W': 2
-        }
-        self.turn = 'B'
-        self.maximizing = max_first
-        self.legal_moves = self.get_legal_moves()
+    def __init__(self, field=None, turn=None, score=None, free_cells=None, maximizing=True, legal_moves=None):
+        if field is None:
+            self.field = [[' ' for i in range(8)] for j in range(8)]
+            self.field[3][3] = 'W'
+            self.field[3][4] = 'B'
+            self.field[4][3] = 'B'
+            self.field[4][4] = 'W'
+        else:
+            self.field = field
+        if turn is None:
+            self.turn = 'B'
+        else:
+            self.turn = turn
+
+        if score is None:
+            self.score = {
+                'B': 2,
+                'W': 2
+            }
+        else:
+            self.score = score
+
+        if free_cells is None:
+            self.free_cells = 60
+        else:
+            self.free_cells = free_cells
+        
+        self.maximizing = maximizing
+
+        if legal_moves is None:
+            self.legal_moves = self.get_legal_moves()
+        else:
+            self.legal_moves = legal_moves
 
     def is_game_over(self):
         if self.free_cells == 0:
@@ -90,6 +112,10 @@ class Board:
         return self.check_direction(x + dx, y + dy, dx, dy, count + 1)
 
     def make_move(self, x, y):
+
+        if x < 0 or x > 7 or y < 0 or y > 7:
+            return False
+
         if self.field[y][x] != ' ':
             return False
         if (x, y) not in self.legal_moves:
@@ -107,6 +133,7 @@ class Board:
         self.turn = 'W' if self.turn == 'B' else 'B'
         self.maximizing = not self.maximizing
         self.legal_moves = self.get_legal_moves()
+        return True
     
     def flip_cells(self, x1, y1, x2, y2):
         dx = 1 if x2 > x1 else -1 if x2 < x1 else 0
@@ -171,19 +198,14 @@ tree = Tree()
 
 def build_tree(node, depth):
     if depth == 0 or node.game_over():
-        node.score = node.board.score['B'] - node.board.score['W'] if node.board.maximizing else node.board.score['W'] - node.board.score['B']
+        node.score = abs(node.board.score['B'] - node.board.score['W'])
         node.is_leaf = True
         return
     for move in node.board.legal_moves:
-        board = Board()
-        maximizingPlayer = not node.board.maximizing
-        board.field = [row[:] for row in node.board.field]
-        board.free_cells = node.board.free_cells
-        board.score = node.board.score.copy()
-        board.turn = node.board.turn
-        board.maximizing = maximizingPlayer
-        board.legal_moves = {move: node.board.legal_moves[move]}
+        board = Board([row[:] for row in node.board.field], node.board.turn,node.board.score.copy(), node.board.free_cells, node.board.maximizing,{move: node.board.legal_moves[move]})
         board.make_move(move[0], move[1])
+        
+        #print(board,end='\n\n')
         child = Node(board, move)
         tree.add_node(child, node)
         build_tree(child, depth - 1)
@@ -193,16 +215,14 @@ def build_tree(node, depth):
 def alphabeta(node, depth, alpha, beta):
     if node.is_leaf:
         return node.score
-    maximizingPlayer = node.board.maximizing
-    if maximizingPlayer:
+    if node.board.maximizing:
         v = -100000000
-        
         for child in tree.get_children(node):
             v = max(v, alphabeta(child, depth - 1, alpha, beta))
             alpha = max(alpha, v)
             if beta <= alpha:
                 break
-        return v
+        
     else:
         v = 100000000
         for child in tree.get_children(node):
@@ -210,38 +230,30 @@ def alphabeta(node, depth, alpha, beta):
             beta = min(beta, v)
             if beta <= alpha:
                 break
-        return v
+
+    node.score = v
+    return v
     
 
 def best_move(node):
-    best_score = -100000000
-    best_move = None
-
-
     if tree.get_children(node) == []:
         tree.clear()
         tree.add_root(node)
         build_tree(node, depth)
 
-    for child in tree.get_children(node):
-        score = alphabeta(child, depth, -100000000, 100000000)
-        if score > best_score:
-            best_score = score
-            best_move = child.move
-            
 
 
+    scores_moves = [(alphabeta(child, depth - 1, -100000000, 100000000), child.move) for child in tree.get_children(node)]
+    if node.board.maximizing:
+        best_score, best_move = max(scores_moves, key=lambda x: x[0])
+    else:
+        best_score, best_move = min(scores_moves, key=lambda x: x[0])
+    #if there are multiple moves with the same score, choose one at random
+    best_moves = [move for score, move in scores_moves if score == best_score]
+    if len(best_moves) > 1:
+        best_move = random.choice(best_moves)
+
+    print("Best move is: " + str(best_move) + " with score " + str(best_score))
     return best_move
-
-    
-
-if __name__ == "__main__":
-    B = Board(True)
-    tree.add_root(Node(B))
-    print(tree.get_root()==Node(B))#why is this false?
-    build_tree(Node(B), depth)
-    print(best_move(tree.get_root()))
-
-        
 
     

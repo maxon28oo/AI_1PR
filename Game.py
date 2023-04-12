@@ -10,7 +10,7 @@ import AlfaBeta as ab
 #pygame simple setup
 pg.init()
 pg.display.set_caption('Reversi')
-screen = pg.display.set_mode((600, 600))
+screen = pg.display.set_mode((600, 700))
 clock = pg.time.Clock()
 
 #colors
@@ -78,7 +78,7 @@ Board = ab.Board()
 
 #game state 0 - selecting who to play with(pc, friend), 1 - chosing who starts, 2 - playing
 game_state = 0
-game_opponent = 0 #0 - pc, 1 - friend, 2 - pc vs pc
+game_opponent = 0 #0 - pc, 1 - friend
 who_is_first = 0 #0 - player 1, 1 - player 2(pc) 
 
 isnt_valid = ()
@@ -126,6 +126,21 @@ def GameSetup():
 def drawGame():
     draw_board()
     draw_pieces()
+
+    #draw white rect from (0,600) to (600, 700)
+    pg.draw.rect(screen, WHITE, (0, 600, 600, 100))
+
+    #draw score
+    font = pg.font.Font(None, 30)
+    text = font.render('Score: ' + str(Board.score), 1, BLACK)
+    screen.blit(text, (0, 650))
+    #draw who's turn
+    if Board.turn == "B":
+        text = font.render('Turn: Black', 1, BLACK)
+    else:
+        text = font.render('Turn: White', 1, M_GRAY)
+    screen.blit(text, (0, 600))
+
     pg.display.update()
 
 
@@ -136,11 +151,8 @@ def MenuSetup():
     widgets.clear()
     play_with_pc = Button(M_GRAY, 200, 200, 200, 50, 'Play with PC',outline=BLACK, function= lambda: setGameOpponent(0))
     play_with_friend = Button(M_GRAY, 200, 300, 200, 50, 'Play with friend',outline=BLACK, function= lambda: setGameOpponent(1))
-    PC_with_PC = Button(M_GRAY, 200, 400, 200, 50, 'PC vs PC',outline=BLACK, function= lambda: setGameOpponent(2))
     widgets.append(play_with_pc)
     widgets.append(play_with_friend)
-    widgets.append(PC_with_PC)
-
 
 def setGameOpponent(_game_opponent):
     global game_opponent
@@ -161,7 +173,7 @@ def drawMenu():
 
 def WinRender():
     screen.fill(WHITE)
-    font = pg.font.Font(None, 100)
+    font = pg.font.Font(None, 60)
     
     if Board.get_winner() == "B":
         text = font.render('Black wins' + ("(You)" if who_is_first == 0  and game_opponent==0 else ("(PC)" if who_is_first == 1  and game_opponent==0 else "")), 1, BLACK)
@@ -177,7 +189,8 @@ def setGameTurn(_game_turn):
     global who_is_first
     print('game turn set to', _game_turn)
     who_is_first = _game_turn
-    Board.maximizing = True
+    Board.maximizing = bool(_game_turn)
+    print('maximizing set to', Board.maximizing)
     GameSetup()
 
 def MenuPost():
@@ -198,9 +211,10 @@ def MenuPost():
 def MouseClick(event):
     global valid_moves, PC_move, time_to_PC_move, PC_next_move, game_state
     
-    if ( who_is_first == 1 and Board.turn == "B" and game_opponent == 0) or (who_is_first == 0 and Board.turn == "W" and game_opponent == 0) or game_opponent == 2:
+    if ( who_is_first == 1 and Board.turn == "B" and game_opponent == 0) or (who_is_first == 0 and Board.turn == "W" and game_opponent == 0):
         return
-    Board.make_move(event.pos[0]//75, event.pos[1]//75)
+    if not Board.make_move(event.pos[0]//75, event.pos[1]//75):
+        return
     valid_moves = []
 
     if Board.field[event.pos[1]//75][event.pos[0]//75] == " ":
@@ -249,22 +263,13 @@ def main():
             time_to_PC_move -= clock.get_time()
             if time_to_PC_move <= 0:
                 Board.make_move(*PC_next_move)
-                if game_opponent == 2:
-                    PC_next_move = ab.best_move(ab.Node(Board))
-                    time_to_PC_move = 1.5 * 1000
-                else:
-                    PC_move = False
-
-                if Board.is_game_over():
-                    game_state = 3
-
 
         for event in pg.event.get():
             if event.type == pg.QUIT:
                 run = False
             if event.type == pg.MOUSEMOTION:
                 if game_state == 2:
-                    if ( who_is_first == 1 and Board.turn == "B" and game_opponent == 0) or (who_is_first == 0 and Board.turn == "W" and game_opponent == 0) or game_opponent == 2:
+                    if ( who_is_first == 1 and Board.turn == "B" and game_opponent == 0) or (who_is_first == 0 and Board.turn == "W" and game_opponent == 0):
                         break
                     predictMove(event)
             if event.type == pg.MOUSEBUTTONDOWN:
